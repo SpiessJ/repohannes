@@ -1,0 +1,105 @@
+---
+title: 'Practical Machine Learning: Course project'
+author: "Johannes Spiess"
+date: "July 2nd, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+The analysis at hand represents the final assignment of the course *Machine Learning* from the *Coursera Data Science Specialization*.
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.The goal of the project at hand is to  use data from accelerometers on the belt, forearm, arm, and dumbell of 6 study participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+A machine learning model will be built to predict in which of the 5 possible ways a person was performing a dumbell curl exercise. Training and test data for the 6 participants will be used containing 160 measurements.
+
+## Downloading and inspecting data
+
+```{r Downloading and inspecting data, echo = TRUE}
+
+## set seed
+set.seed(25031986)
+train_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url=train_url, destfile="training.csv")
+download.file(url=test_url, destfile="testing.csv")
+mytraining <- read.csv(url(train_url), na.strings=c("NA","#DIV/0!",""))
+test <- read.csv(url(test_url), na.strings=c("NA","#DIV/0!",""))
+dim(mytraining)
+dim(test)
+```
+
+## Preparing Training and Test Data
+
+A subset of the training data (40%) is reserved for cross validation.
+
+```{r partitioning the data, echo = TRUE}
+library(caret)
+inTrain <- createDataPartition(mytraining$classe, p=0.6, list=FALSE)
+mytraining <- mytraining[inTrain, ] # inTrain vector into mytraining
+mytesting <- mytraining[-inTrain, ] # leftover data into mytesting (40%)
+dim(mytraining); dim(mytesting) # look at training and test dataset
+```
+
+## Data cleaning
+
+So called near-zero-variance variables (i.e. variables where the observations are all the same) are cleaned.
+
+```{r remove near zero variance cases, echo = TRUE}
+library(caret) # load caret package
+nzv <- nearZeroVar(mytraining, saveMetrics=TRUE) # apply near zero variance cleaning
+mytraining <- mytraining[,nzv$nzv==FALSE] # update training dataset
+dim(mytraining) # look at training dataset
+```
+
+To control for missing values, variables where 75% or more of the observations are missing are deleted.
+Moreover the first seven variables that do not contain predictors are deleted.
+
+```{r data cleaning, echo = TRUE}
+
+trainingdataset <- mytraining
+for(i in 1:length(mytraining)) {
+    if( sum( is.na( mytraining[, i] ) ) /nrow(mytraining) >= .75) {
+        for(j in 1:length(trainingdataset)) {
+            if( length( grep(names(mytraining[i]), names(trainingdataset)[j]) ) == 1)  {
+                trainingdataset <- trainingdataset[ , -j]
+            }   
+        } 
+    }
+}
+mytraining <- trainingdataset # update training dataset
+rm(trainingdataset)
+mytraining <- mytraining[,8:length(mytraining)] # remove first 7 variables
+dim(mytraining)
+```
+
+A random forst model is used as the task at hand represents a classification problem. The way the participants do the exercises are modeled in classes (A, B, C, D, E) from the available data and predicted from it in a second step.
+
+```{r random forest model, echo = TRUE}
+set.seed(17121982)
+modfit <-  train(classe~.,data=mytraining,method="rf",allowParallel=TRUE, .multicombine=TRUE, ntree = 100, nodesize = 15)
+print(modfit)
+```
+
+The tree model with the best accurarcy was selected (98.17%).
+The model is applied to the test sample generated from the split above.
+
+```{r cross validate, echo = TRUE}
+predict <- predict(modfit, mytesting)
+confusionMatrix(mytesting$classe, predict)
+```
+
+The prediction accurarcy for the test dataset is 99.79%.
+
+Finally the 20 cases from the original test dataset are predicted.
+
+```{r predict 20 test cases, echo = TRUE}
+predictfinal <- predict(modfit, test)
+print(predictfinal)
+```
+
+
+
+
+
